@@ -1,5 +1,4 @@
 import type { Context } from "@netlify/functions";
-import { getStore } from "@netlify/blobs";
 
 const AIRTABLE_BASE = "appAtE1hE5frgdQFo";
 const AIRTABLE_TABLE = "tblxnJEq6aeYI8BYM";
@@ -44,29 +43,51 @@ async function fetchEvents() {
   }));
 }
 
+async function fetchCountyUpdates() {
+  try {
+    const res = await fetch("https://www.norfolkcounty.ca/news-and-notices/", {
+      headers:{"User-Agent":"Mozilla/5.0 (compatible; NorfolkInsider/1.0)"},
+      signal: AbortSignal.timeout(10000),
+    });
+    const html = await res.text();
+    const updates: {title:string;url:string;description:string}[] = [];
+    const seen = new Set<string>();
+    for (const m of html.matchAll(/href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/[^"]+)"[^>]*>\s*([^<]{10,})<\/a>/g)) {
+      const url = m[1];
+      const title = m[2].trim().replace(/\s+/g," ");
+      if (!seen.has(url) && title.length > 10) {
+        seen.add(url);
+        updates.push({title, url, description:""});
+      }
+      if (updates.length >= 4) break;
+    }
+    return updates;
+  } catch { return []; }
+}
+
 export default async (req: Request, context: Context) => {
   try {
     const dateLabel = new Date().toLocaleDateString("en-CA",{
       weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"America/Toronto"
     });
 
-    const [weather, events, stored] = await Promise.all([
+    const [weather, events, countyUpdates] = await Promise.all([
       fetchWeather(),
       fetchEvents(),
-      getStore("editions").get("latest",{type:"json"}).catch(()=>null),
+      fetchCountyUpdates(),
     ]);
 
     return new Response(JSON.stringify({
       date: new Date().toISOString().split("T")[0],
       dateLabel,
       weather,
-      news: stored?.news || [],
+      news: countyUpdates,
       events,
     }), {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*",
+      headers:{
+        "Content-Type":"application/json",
+        "Cache-Control":"no-store",
+        "Access-Control-Allow-Origin":"*",
       },
     });
   } catch(err) {

@@ -43,26 +43,52 @@ async function fetchEvents() {
   }));
 }
 
+function slugToTitle(slug: string): string {
+  return slug
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function fetchCountyUpdates() {
   try {
     const res = await fetch("https://www.norfolkcounty.ca/news-and-notices/", {
-      headers:{"User-Agent":"Mozilla/5.0 (compatible; NorfolkInsider/1.0)"},
-      signal: AbortSignal.timeout(10000),
+      headers:{
+        "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language":"en-CA,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(15000),
     });
+
+    if (!res.ok) return [];
     const html = await res.text();
-    const updates: {title:string;url:string;description:string}[] = [];
+
+    // Extract all unique post URLs
     const seen = new Set<string>();
-    for (const m of html.matchAll(/href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/[^"]+)"[^>]*>\s*([^<]{10,})<\/a>/g)) {
-      const url = m[1];
-      const title = m[2].trim().replace(/\s+/g," ");
-      if (!seen.has(url) && title.length > 10) {
+    const updates: {title:string;url:string;description:string;source:string}[] = [];
+
+    for (const m of html.matchAll(/href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/([^"?#\/]+)(?:\/)?)"[^>]*>/g)) {
+      const url = m[1].endsWith('/') ? m[1] : m[1] + '/';
+      const slug = m[2];
+      if (!seen.has(url) && slug && slug.length > 5) {
         seen.add(url);
-        updates.push({title, url, description:""});
+        updates.push({
+          title: slugToTitle(slug),
+          url,
+          description: "",
+          source: "Norfolk County",
+        });
       }
       if (updates.length >= 4) break;
     }
+
     return updates;
-  } catch { return []; }
+  } catch(e) {
+    console.error("County fetch error:", e);
+    return [];
+  }
 }
 
 export default async (req: Request, context: Context) => {
@@ -77,11 +103,19 @@ export default async (req: Request, context: Context) => {
       fetchCountyUpdates(),
     ]);
 
+    // If scraper fails, return a single link to the county news page
+    const news = countyUpdates.length > 0 ? countyUpdates : [{
+      title: "View Latest Norfolk County Updates",
+      url: "https://www.norfolkcounty.ca/news-and-notices/",
+      description: "Road closures, service disruptions, public notices and more.",
+      source: "Norfolk County",
+    }];
+
     return new Response(JSON.stringify({
       date: new Date().toISOString().split("T")[0],
       dateLabel,
       weather,
-      news: countyUpdates,
+      news,
       events,
     }), {
       headers:{

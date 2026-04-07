@@ -1,211 +1,211 @@
-import { schedule } from "@netlify/functions";
-import { getStore } from "@netlify/blobs";
-
-const AIRTABLE_BASE = "appAtE1hE5frgdQFo";
-const AIRTABLE_TABLE = "tblxnJEq6aeYI8BYM";
-const LAT = 42.84;
-const LNG = -80.30;
-
-const WMO_CODES: Record<number, string> = {
-  0: "Clear skies", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-  45: "Foggy", 48: "Freezing fog",
-  51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
-  61: "Light rain", 63: "Rain", 65: "Heavy rain",
-  71: "Light snow", 73: "Snow", 75: "Heavy snow",
-  80: "Rain showers", 81: "Moderate showers", 82: "Heavy showers",
-  95: "Thunderstorms", 96: "Thunderstorms with hail",
-};
-
-// ─── Weather — no AI, just clean data ────────────────────────────────────────
-
-async function fetchWeather() {
-  const url = `https://api.open-meteo.com/v1/forecast` +
-    `?latitude=${LAT}&longitude=${LNG}&current_weather=true` +
-    `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,windspeed_10m_max` +
-    `&timezone=America%2FToronto&forecast_days=1`;
-  const res = await fetch(url);
-  const data = await res.json();
-  const current = data.current_weather;
-  const daily = data.daily;
-  return {
-    condition: WMO_CODES[current.weathercode] ?? "Variable",
-    tempCurrent: Math.round(current.temperature),
-    tempMax: Math.round(daily.temperature_2m_max[0]),
-    tempMin: Math.round(daily.temperature_2m_min[0]),
-    rainChance: daily.precipitation_probability_max[0],
-    windspeed: Math.round(daily.windspeed_10m_max[0]),
-  };
-}
-
-// ─── RSS ──────────────────────────────────────────────────────────────────────
-
-function parseRSS(xml: string) {
-  const items: { title: string; link: string; description: string }[] = [];
-  for (const match of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-    const b = match[1];
-    const title = b.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s)?.[1]?.trim() ?? "";
-    const link = b.match(/<link>(.*?)<\/link>/s)?.[1]?.trim() ?? "";
-    const description = b.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/s)?.[1]
-      ?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 300) ?? "";
-    if (title) items.push({ title, link, description });
-    if (items.length >= 8) break;
-  }
-  return items;
-}
-
-async function fetchRSS(url: string, sourceName: string) {
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; NorfolkInsider/1.0)" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    return { source: sourceName, items: parseRSS(await res.text()) };
-  } catch { return null; }
-}
-
-// ─── Norfolk County scraper ───────────────────────────────────────────────────
-
-async function fetchNorfolkCountyNews() {
-  try {
-    const res = await fetch("https://www.norfolkcounty.ca/news-and-notices/", {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; NorfolkInsider/1.0)" },
-      signal: AbortSignal.timeout(10000),
-    });
-    const html = await res.text();
-    const items: { title: string; link: string; description: string }[] = [];
-    const seen = new Set<string>();
-    const pattern = /href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/[^"]+)"[^>]*>\s*([^<]{10,})<\/a>/g;
-    for (const match of html.matchAll(pattern)) {
-      const link = match[1];
-      const title = match[2].trim().replace(/\s+/g, " ");
-      if (!seen.has(link) && title.length > 10) {
-        seen.add(link);
-        items.push({ title, link, description: "" });
-      }
-      if (items.length >= 5) break;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>The Norfolk Insider</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f7f5;
+      --surface: #ffffff;
+      --border: rgba(0,0,0,0.06);
+      --text: #2c332d;
+      --text-muted: #5e6b60;
+      --text-dim: #8b9c8e;
+      --amber: #e07a16;
+      --amber-dim: #fff7ed;
+      --amber-text: #964d05;
+      --green: #25995b;
+      --green-dim: #ebf7f0;
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.03);
     }
-    if (items.length === 0) return null;
-    return { source: "Norfolk County", items };
-  } catch { return null; }
-}
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--bg); }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      max-width: 480px;
+      margin: 0 auto;
+      padding-bottom: 3rem;
+    }
+    .logo-wrap { padding: 2rem 1.25rem 0.5rem; text-align: center; }
+    .logo { width: 160px; height: 160px; object-fit: contain; mix-blend-mode: multiply; }
+    .header { padding: 0.25rem 1.25rem 1.25rem; text-align: center; }
+    .header-eyebrow { font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+    .header-date { margin-top: 0.3rem; font-size: 0.75rem; color: var(--text-muted); }
+    .weather-card {
+      margin: 0 1.25rem 1rem;
+      background: var(--amber-dim);
+      border: 1px solid rgba(224,122,22,0.15);
+      border-radius: 16px;
+      padding: 1.1rem 1.25rem;
+      box-shadow: var(--shadow-sm);
+      animation: rise 0.4s ease 0.1s both;
+    }
+    .weather-label { font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--amber); font-weight: 700; margin-bottom: 0.6rem; }
+    .weather-main { display: flex; align-items: center; justify-content: space-between; }
+    .weather-left { display: flex; align-items: baseline; gap: 0.6rem; }
+    .weather-temp { font-family: 'Fraunces', serif; font-size: 2.8rem; font-weight: 700; line-height: 1; color: var(--amber); }
+    .weather-temp sup { font-size: 1.1rem; font-weight: 400; vertical-align: super; }
+    .weather-condition { font-size: 0.88rem; color: var(--amber-text); font-weight: 500; }
+    .weather-stats { display: flex; gap: 1rem; }
+    .weather-stat { text-align: right; }
+    .weather-stat-val { font-family: 'Fraunces', serif; font-size: 1rem; font-weight: 700; color: var(--amber); line-height: 1; }
+    .weather-stat-lbl { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber-text); opacity: 0.7; font-weight: 600; margin-top: 0.1rem; }
+    .section { margin: 0 1.25rem 1.25rem; animation: rise 0.4s ease 0.2s both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .section-label { font-size: 0.58rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim); font-weight: 700; }
+    .section-count { font-size: 0.65rem; color: var(--text-dim); }
+    .news-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem; margin-bottom: 0.75rem; box-shadow: var(--shadow-sm); }
+    .news-card a { text-decoration: none; color: inherit; display: block; }
+    .news-card-source { font-size: 0.58rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--green); font-weight: 700; margin-bottom: 0.35rem; }
+    .news-card-title { font-family: 'Fraunces', serif; font-size: 1.05rem; font-weight: 700; line-height: 1.3; color: var(--text); margin-bottom: 0.45rem; }
+    .news-card-summary { font-size: 0.83rem; line-height: 1.6; color: var(--text-muted); }
+    .news-card-arrow { display: inline-block; margin-top: 0.55rem; font-size: 0.72rem; color: var(--green); font-weight: 600; }
+    .town-group { margin-bottom: 1.25rem; }
+    .town-label { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); font-weight: 700; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+    .town-label::after { content: ''; flex: 1; height: 1px; background: rgba(37,153,91,0.2); }
+    .event-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; margin-bottom: 0.6rem; display: flex; gap: 0.875rem; align-items: flex-start; box-shadow: var(--shadow-sm); }
+    .event-date-pill { flex-shrink: 0; background: var(--green-dim); border: 1px solid rgba(37,153,91,0.15); border-radius: 10px; padding: 0.4rem 0.55rem; text-align: center; min-width: 46px; }
+    .event-date-day { font-family: 'Fraunces', serif; font-size: 1.25rem; font-weight: 900; line-height: 1; color: var(--green); }
+    .event-date-mon { font-size: 0.52rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--green); opacity: 0.75; font-weight: 600; margin-top: 0.15rem; }
+    .event-body { flex: 1; min-width: 0; }
+    .event-title { font-family: 'Fraunces', serif; font-size: 0.95rem; font-weight: 700; line-height: 1.3; color: var(--text); margin-bottom: 0.2rem; }
+    .event-location { font-size: 0.65rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 0.25rem; }
+    .event-blurb { font-size: 0.8rem; line-height: 1.55; color: var(--text-muted); }
+    .empty { padding: 1.5rem; text-align: center; color: var(--text-dim); font-size: 0.85rem; font-style: italic; background: var(--surface); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.08); }
+    .divider { height: 1px; background: var(--border); margin: 0.25rem 1.25rem 1.25rem; }
+    .footer { margin: 1.5rem 1.25rem 0; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .footer-brand { font-family: 'Fraunces', serif; font-size: 0.85rem; font-weight: 700; font-style: italic; color: var(--text-dim); }
+    .footer-meta { font-size: 0.62rem; color: var(--text-dim); text-align: right; line-height: 1.5; }
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 1rem; padding: 2rem; }
+    .loading-title { font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 700; font-style: italic; color: var(--text-muted); }
+    .loading-dots { display: flex; gap: 0.4rem; }
+    .loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); animation: blink 1.2s ease-in-out infinite; }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="loading">
+      <div class="loading-title">Good morning, Norfolk.</div>
+      <div class="loading-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+  <script>
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const TOWNS = ['Port Dover','Port Rowan','Long Point','Simcoe','Delhi','Waterford','Tillsonburg','Vittoria','Teeterville','Langton','Norwich','Jarvis','Hagersville','Caledonia','Dunnville','Courtland','Windham','Scotland'];
 
-// ─── Airtable Events ──────────────────────────────────────────────────────────
+    function extractTown(location) {
+      if (!location) return 'Norfolk County';
+      for (const town of TOWNS) {
+        if (location.includes(town)) return town;
+      }
+      const comma = location.lastIndexOf(',');
+      if (comma > 0) return location.substring(comma + 1).trim();
+      return 'Norfolk County';
+    }
 
-async function fetchEvents() {
-  const today = new Date().toISOString().split("T")[0];
-  const inThirtyDays = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
-  const formula = encodeURIComponent(`AND({Date} >= "${today}", {Date} <= "${inThirtyDays}")`);
-  const res = await fetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${AIRTABLE_TABLE}` +
-    `?filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=asc&maxRecords=20`,
-    { headers: { Authorization: `Bearer ${process.env.AIRTABLE_TOKEN}` } }
-  );
-  if (!res.ok) { console.error("Airtable error:", await res.text()); return []; }
-  const data = await res.json();
-  return (data.records || []).map((r: any) => ({
-    title: r.fields.Title || "Untitled Event",
-    date: r.fields.Date || "",
-    location: r.fields.Location || "",
-    blurb: r.fields.Blurb || "",
-  }));
-}
+    function parseDatePill(dateStr) {
+      if (!dateStr) return { day: '—', mon: '—' };
+      const parts = dateStr.split('-');
+      if (parts.length === 3) return { day: parseInt(parts[2]), mon: MONTHS[parseInt(parts[1]) - 1] };
+      return { day: '—', mon: '—' };
+    }
 
-// ─── Claude — news summarizer ─────────────────────────────────────────────────
+    function renderWeather(w) {
+      if (!w || !w.condition) return '';
+      return '<div class="weather-card">' +
+        '<div class="weather-label">Norfolk County Weather</div>' +
+        '<div class="weather-main">' +
+          '<div class="weather-left">' +
+            '<div class="weather-temp">' + w.tempCurrent + '<sup>C</sup></div>' +
+            '<div class="weather-condition">' + w.condition + '</div>' +
+          '</div>' +
+          '<div class="weather-stats">' +
+            '<div class="weather-stat"><div class="weather-stat-val">' + w.tempMax + '</div><div class="weather-stat-lbl">High</div></div>' +
+            '<div class="weather-stat"><div class="weather-stat-val">' + w.tempMin + '</div><div class="weather-stat-lbl">Low</div></div>' +
+            '<div class="weather-stat"><div class="weather-stat-val">' + w.rainChance + '%</div><div class="weather-stat-lbl">Rain</div></div>' +
+            '<div class="weather-stat"><div class="weather-stat-val">' + w.windspeed + '</div><div class="weather-stat-lbl">km/h</div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
 
-async function summarizeNews(feeds: ({ source: string; items: { title: string; link: string; description: string }[] } | null)[]) {
-  const validFeeds = feeds.filter(Boolean);
-  if (validFeeds.length === 0) return [];
+    function renderNews(news) {
+      if (!news || news.length === 0) return '<div class="empty">No news stories today.</div>';
+      return news.map(function(n) {
+        return '<div class="news-card"><a href="' + (n.url || '#') + '" target="_blank" rel="noopener">' +
+          '<div class="news-card-source">' + n.source + '</div>' +
+          '<div class="news-card-title">' + n.title + '</div>' +
+          '<div class="news-card-summary">' + n.summary + '</div>' +
+          (n.url ? '<span class="news-card-arrow">Read more</span>' : '') +
+          '</a></div>';
+      }).join('');
+    }
 
-  const storiesText = validFeeds
-    .flatMap(f => (f!.items || []).map(item =>
-      `SOURCE: ${f!.source}\nTITLE: ${item.title}\nURL: ${item.link || ""}\nSNIPPET: ${item.description}`
-    ))
-    .join("\n\n---\n\n");
+    function renderEvents(events) {
+      if (!events || events.length === 0) return '<div class="empty">No upcoming events in the next 30 days.</div>';
+      var groups = {};
+      events.forEach(function(ev) {
+        var town = extractTown(ev.location);
+        if (!groups[town]) groups[town] = [];
+        groups[town].push(ev);
+      });
+      var sortedTowns = Object.keys(groups).sort(function(a, b) {
+        if (a === 'Simcoe') return -1;
+        if (b === 'Simcoe') return 1;
+        return a.localeCompare(b);
+      });
+      return sortedTowns.map(function(town) {
+        var cards = groups[town].map(function(ev) {
+          var pill = parseDatePill(ev.date);
+          return '<div class="event-card">' +
+            '<div class="event-date-pill">' +
+              '<div class="event-date-day">' + pill.day + '</div>' +
+              '<div class="event-date-mon">' + pill.mon + '</div>' +
+            '</div>' +
+            '<div class="event-body">' +
+              '<div class="event-title">' + ev.title + '</div>' +
+              (ev.location ? '<div class="event-location">' + ev.location + '</div>' : '') +
+              (ev.blurb ? '<div class="event-blurb">' + ev.blurb + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+        return '<div class="town-group"><div class="town-label">' + town + '</div>' + cards + '</div>';
+      }).join('');
+    }
 
-  const prompt = `You are the editor of The Norfolk Insider, a community daily brief for Norfolk County, Ontario, Canada.
+    function render(ed) {
+      document.title = 'The Norfolk Insider — ' + (ed.dateLabel || ed.date);
+      document.getElementById('app').innerHTML =
+        '<div class="logo-wrap"><img src="https://norfolkinsider.ca/wp-content/uploads/2026/04/Screenshot-2026-02-25-053350.png" alt="The Norfolk Insider" class="logo" /></div>' +
+        '<div class="header"><div class="header-eyebrow">Norfolk County Daily Brief</div><div class="header-date">' + (ed.dateLabel || ed.date) + '</div></div>' +
+        renderWeather(ed.weather) +
+        '<div class="divider"></div>' +
+        '<div class="section"><div class="section-header"><div class="section-label">Local News</div><div class="section-count">' + (ed.news || []).length + ' stories</div></div>' + renderNews(ed.news) + '</div>' +
+        '<div class="section"><div class="section-header"><div class="section-label">Upcoming Events</div><div class="section-count">' + (ed.events || []).length + ' events</div></div>' + renderEvents(ed.events) + '</div>' +
+        '<div class="footer"><div class="footer-brand">The Norfolk Insider</div><div class="footer-meta">Updated daily<br>norfolkinsider.com</div></div>';
+    }
 
-From the stories below, select the 3 most interesting and relevant for Norfolk County residents.
+    function renderError() {
+      document.getElementById('app').innerHTML =
+        '<div class="logo-wrap"><img src="https://norfolkinsider.ca/wp-content/uploads/2026/04/Screenshot-2026-02-25-053350.png" alt="The Norfolk Insider" class="logo" /></div>' +
+        '<div class="loading"><div class="loading-title">Check back after 8am.</div></div>';
+    }
 
-STRICT RULES:
-- Maximum ONE story per source — never pick two stories from the same source
-- NEVER include any story involving crime, arrests, charges, assault, theft, homicide, police investigations, or court proceedings — skip entirely
-- Prioritize stories directly about Norfolk County, Haldimand-Norfolk, or towns like Simcoe, Port Dover, Delhi, Waterford, Tillsonburg
-- If no strong local stories exist, pick the most relevant southwestern Ontario stories
-
-For each selected story write:
-- A clean readable headline
-- A 2-sentence plain summary in friendly community voice
-- Source name and URL
-
-Return ONLY a valid JSON array, no markdown fences:
-[{"title":"...","summary":"...","source":"...","url":"..."}]
-
-STORIES:
-${storiesText}`;
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 800,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  const data = await res.json();
-  const raw = data.content?.[0]?.text?.trim() ?? "[]";
-  try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-  catch { return []; }
-}
-
-// ─── Build & Schedule ─────────────────────────────────────────────────────────
-
-async function buildEdition() {
-  const todayLabel = new Date().toLocaleDateString("en-CA", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-    timeZone: "America/Toronto",
-  });
-
-  const [weather, events, norfolkToday, cbcHamilton, brantfordExpositor, ctvKitchener, norfolkCounty] =
-    await Promise.all([
-      fetchWeather(),
-      fetchEvents(),
-      fetchRSS("https://www.norfolktoday.ca/feed/", "Norfolk Today"),
-      fetchRSS("https://www.cbc.ca/cmlink/rss-canada-hamiltonnews", "CBC Hamilton"),
-      fetchRSS("https://www.brantfordexpositor.ca/feed/", "Brantford Expositor"),
-      fetchRSS("https://kitchener.ctvnews.ca/rss/ctv-news-kitchener-1.822545", "CTV Kitchener"),
-      fetchNorfolkCountyNews(),
-    ]);
-
-  const news = await summarizeNews([norfolkToday, cbcHamilton, brantfordExpositor, ctvKitchener, norfolkCounty]);
-
-  return {
-    date: new Date().toISOString().split("T")[0],
-    dateLabel: todayLabel,
-    generatedAt: new Date().toISOString(),
-    weather,
-    news,
-    events,
-  };
-}
-
-export const handler = schedule("0 12 * * *", async () => {
-  console.log("Norfolk Insider daily engine running...");
-  try {
-    const edition = await buildEdition();
-    const store = getStore("editions");
-    await store.set("latest", JSON.stringify(edition));
-    await store.set(edition.date, JSON.stringify(edition));
-    console.log("Edition saved:", edition.date);
-    return { statusCode: 200 };
-  } catch (err) {
-    console.error("Engine failed:", err);
-    return { statusCode: 500 };
-  }
-});
+    fetch('/api/edition').then(function(res) {
+      if (!res.ok) { renderError(); return; }
+      res.json().then(render);
+    }).catch(renderError);
+  </script>
+</body>
+</html>

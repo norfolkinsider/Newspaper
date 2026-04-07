@@ -136,13 +136,15 @@ export default async (req: Request, context: Context) => {
     await store.set("latest", JSON.stringify(edition));
     await store.set(edition.date, JSON.stringify(edition));
 
-    return new Response(JSON.stringify({
-      success:true,
-      date:edition.date,
-      newsCount:news.length,
-      eventCount:events.length,
-      rawStoriesFound:newsItems.length,
-    }), {headers:{"Content-Type":"application/json"}});
+   return new Response(JSON.stringify({
+  success:true,
+  date:edition.date,
+  newsCount:news.length,
+  eventCount:events.length,
+  rawStoriesFound:newsItems.length,
+  rawTitles: newsItems.map(i => i.title),
+  news,
+}), {headers:{"Content-Type":"application/json"}});
   } catch(err) {
     return new Response(JSON.stringify({error:String(err)}),{
       status:500,headers:{"Content-Type":"application/json"},

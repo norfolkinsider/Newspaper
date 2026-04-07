@@ -147,7 +147,7 @@
           '<div class="news-card-source">' + n.source + '</div>' +
           '<div class="news-card-title">' + n.title + '</div>' +
           '<div class="news-card-summary">' + n.summary + '</div>' +
-          (n.url ? '<span class="news-card-arrow">Read more</span>' : '') +
+          (n.url ? '<span class="news-card-arrow">Read on norfolkcounty.ca →</span>' : '') +
           '</a></div>';
       }).join('');
     }
@@ -191,7 +191,7 @@
         '<div class="header"><div class="header-eyebrow">Norfolk County Daily Brief</div><div class="header-date">' + (ed.dateLabel || ed.date) + '</div></div>' +
         renderWeather(ed.weather) +
         '<div class="divider"></div>' +
-        '<div class="section"><div class="section-header"><div class="section-label">Local News</div><div class="section-count">' + (ed.news || []).length + ' stories</div></div>' + renderNews(ed.news) + '</div>' +
+        '<div class="section"><div class="section-header"><div class="section-label">County Updates</div><div class="section-count">' + (ed.news || []).length + ' stories</div></div>' + renderNews(ed.news) + '</div>' +
         '<div class="section"><div class="section-header"><div class="section-label">Upcoming Events</div><div class="section-count">' + (ed.events || []).length + ' events</div></div>' + renderEvents(ed.events) + '</div>' +
         '<div class="footer"><div class="footer-brand">The Norfolk Insider</div><div class="footer-meta">Updated daily<br>norfolkinsider.com</div></div>';
     }

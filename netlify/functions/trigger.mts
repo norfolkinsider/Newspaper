@@ -28,39 +28,20 @@ async function fetchWeather() {
 }
 
 function parseRSS(xml: string) {
-  const items: {title:string;link:string;description:string}[] = [];
+  const items: {title:string;link:string;description:string;source:string}[] = [];
   for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
     const b = m[1];
     const title = b.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s)?.[1]?.trim() ?? "";
-    const link = b.match(/<link>(.*?)<\/link>/s)?.[1]?.trim() ?? "";
-    const description = b.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/s)?.[1]?.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().substring(0,300) ?? "";
-    if (title) items.push({title,link,description});
-    if (items.length >= 8) break;
+    const link = b.match(/<link>(.*?)<\/link>/s)?.[1]?.trim()
+      ?? b.match(/<guid[^>]*>(https?:\/\/[^<]+)<\/guid>/s)?.[1]?.trim() ?? "";
+    const description = b.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/s)?.[1]
+      ?.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().substring(0,300) ?? "";
+    // Extract source from Google News RSS
+    const sourceName = b.match(/<source[^>]*>(.*?)<\/source>/s)?.[1]?.trim() ?? "";
+    if (title) items.push({title, link, description, source: sourceName});
+    if (items.length >= 15) break;
   }
   return items;
-}
-
-async function fetchRSS(url: string, source: string) {
-  try {
-    const res = await fetch(url, {headers:{"User-Agent":"Mozilla/5.0"},signal:AbortSignal.timeout(8000)});
-    if (!res.ok) return null;
-    return {source, items: parseRSS(await res.text())};
-  } catch { return null; }
-}
-
-async function fetchNorfolkCounty() {
-  try {
-    const res = await fetch("https://www.norfolkcounty.ca/news-and-notices/", {headers:{"User-Agent":"Mozilla/5.0"},signal:AbortSignal.timeout(10000)});
-    const html = await res.text();
-    const items: {title:string;link:string;description:string}[] = [];
-    const seen = new Set<string>();
-    for (const m of html.matchAll(/href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/[^"]+)"[^>]*>\s*([^<]{10,})<\/a>/g)) {
-      const link = m[1], title = m[2].trim().replace(/\s+/g," ");
-      if (!seen.has(link) && title.length > 10) { seen.add(link); items.push({title,link,description:""}); }
-      if (items.length >= 5) break;
-    }
-    return items.length ? {source:"Norfolk County", items} : null;
-  } catch { return null; }
 }
 
 async function fetchEvents() {
@@ -72,7 +53,7 @@ async function fetchEvents() {
     {headers:{Authorization:`Bearer ${process.env.AIRTABLE_TOKEN}`}}
   );
   const d = await res.json();
-  return (d.records||[]).map((r:any) => ({
+  return (d.records||[]).map((r:any)=>({
     title: r.fields.Title||"Untitled",
     date: r.fields.Date||"",
     location: r.fields.Location||"",
@@ -80,22 +61,39 @@ async function fetchEvents() {
   }));
 }
 
-async function summarizeNews(feeds: ({source:string;items:{title:string;link:string;description:string}[]}|null)[]) {
-  const valid = feeds.filter(Boolean);
-  if (!valid.length) return [];
-  const stories = valid.flatMap(f=>f!.items.map(i=>`SOURCE: ${f!.source}\nTITLE: ${i.title}\nURL: ${i.link}\nSNIPPET: ${i.description}`)).join("\n\n---\n\n");
+async function fetchNews() {
+  // Google News RSS — searches for Norfolk County Ontario, excludes paywalled sources
+  const url = "https://news.google.com/rss/search?q=%22Norfolk+County%22+Ontario+-site:simcoereformer.ca+-site:brantfordexpositor.ca&hl=en-CA&gl=CA&ceid=CA:en";
+  try {
+    const res = await fetch(url, {
+      headers:{"User-Agent":"Mozilla/5.0 (compatible; NorfolkInsider/1.0)"},
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+    const items = parseRSS(await res.text());
+    return items;
+  } catch { return []; }
+}
+
+async function summarizeNews(items: {title:string;link:string;description:string;source:string}[]) {
+  if (!items.length) return [];
+
+  const stories = items.map(i =>
+    `PUBLICATION: ${i.source || "Unknown"}\nTITLE: ${i.title}\nURL: ${i.link}\nSNIPPET: ${i.description}`
+  ).join("\n\n---\n\n");
+
   const prompt = `You are the editor of The Norfolk Insider, a community daily brief for Norfolk County, Ontario, Canada.
 
-From the stories below pick the 3 most relevant for Norfolk County residents.
+From the stories below pick the 3 most interesting and relevant for Norfolk County residents.
 
 RULES:
-- Maximum ONE story per source — never two from the same source
-- NEVER include crime, arrests, charges, assault, theft, homicide, police investigations, or court proceedings
-- Prioritize Norfolk County, Haldimand-Norfolk, Simcoe, Port Dover, Delhi, Waterford, Tillsonburg
-- If nothing strongly local, pick best southwestern Ontario stories
+- Pick stories from 3 different publications — never two from the same publication
+- NEVER include crime, arrests, charges, assault, theft, homicide, police investigations, or court proceedings — skip these entirely
+- Prioritize stories directly about Norfolk County, Simcoe, Port Dover, Delhi, Waterford, Tillsonburg, or Haldimand-Norfolk
+- If nothing strongly local exists, pick the best southwestern Ontario stories
 
-Return ONLY valid JSON array, no markdown:
-[{"title":"...","summary":"2 sentence plain summary.","source":"...","url":"..."}]
+Return ONLY a valid JSON array, no markdown fences:
+[{"title":"Rewritten headline","summary":"2 sentence plain friendly summary.","source":"Publication name","url":"https://..."}]
 
 STORIES:
 ${stories}`;
@@ -115,29 +113,40 @@ export default async (req: Request, context: Context) => {
     return new Response("Unauthorized",{status:401});
 
   try {
-    const todayLabel = new Date().toLocaleDateString("en-CA",{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"America/Toronto"});
-    const [weather, events, norfolkToday, cbcHamilton, brantfordExpositor, ctvKitchener, norfolkCounty] = await Promise.all([
-      fetchWeather(), fetchEvents(),
-      fetchRSS("https://www.norfolktoday.ca/feed/","Norfolk Today"),
-      fetchRSS("https://rss.cbc.ca/hamilton/news/","CBC Hamilton"),
-      fetchRSS("https://globalnews.ca/hamilton/feed/","Global News Hamilton"),
-      fetchRSS("https://www.brantfordexpositor.ca/feed/","Brantford Expositor"),
-      fetchNorfolkCounty(),
+    const todayLabel = new Date().toLocaleDateString("en-CA",{
+      weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"America/Toronto"
+    });
+
+    const [weather, events, newsItems] = await Promise.all([
+      fetchWeather(),
+      fetchEvents(),
+      fetchNews(),
     ]);
-    const news = await summarizeNews([norfolkToday,cbcHamilton,brantfordExpositor,ctvKitchener,norfolkCounty]);
+
+    const news = await summarizeNews(newsItems);
+
     const edition = {
       date: new Date().toISOString().split("T")[0],
       dateLabel: todayLabel,
       generatedAt: new Date().toISOString(),
       weather, news, events,
     };
+
     const store = getStore("editions");
-    await store.set("latest",JSON.stringify(edition));
-    await store.set(edition.date,JSON.stringify(edition));
-    return new Response(JSON.stringify({success:true,date:edition.date,newsCount:news.length,eventCount:events.length}),
-      {headers:{"Content-Type":"application/json"}});
+    await store.set("latest", JSON.stringify(edition));
+    await store.set(edition.date, JSON.stringify(edition));
+
+    return new Response(JSON.stringify({
+      success:true,
+      date:edition.date,
+      newsCount:news.length,
+      eventCount:events.length,
+      rawStoriesFound:newsItems.length,
+    }), {headers:{"Content-Type":"application/json"}});
   } catch(err) {
-    return new Response(JSON.stringify({error:String(err)}),{status:500,headers:{"Content-Type":"application/json"}});
+    return new Response(JSON.stringify({error:String(err)}),{
+      status:500,headers:{"Content-Type":"application/json"},
+    });
   }
 };
 

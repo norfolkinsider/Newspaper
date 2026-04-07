@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<!-- saved from url=(0045)file:///C:/Users/bradl/Downloads/index_3.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>The Norfolk Insider</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com/">
+  <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+  <link href="./index_files/css2" rel="stylesheet">
 
   <style>
     :root {
@@ -180,8 +180,7 @@
       transform: translateY(16px);
     }
 
-    .section:nth-child(3) { animation: rise 0.5s ease 0.2s forwards; }
-    .section:nth-child(4) { animation: rise 0.5s ease 0.3s forwards; }
+    .section { animation: rise 0.5s ease 0.2s forwards; }
 
     @keyframes rise {
       to { opacity: 1; transform: translateY(0); }
@@ -421,11 +420,15 @@
 
 <body>
   <div id="app">
-    <div class="loading">
-      <div class="loading-title">Good morning, Norfolk.</div>
-      <div class="loading-dots"><span></span><span></span><span></span></div>
-    </div>
-  </div>
+        <div class="header">
+          <div class="header-eyebrow">Norfolk County · Daily Brief</div>
+          <div class="header-title">The Norfolk <em>Insider</em></div>
+        </div>
+        <div class="loading">
+          <div class="loading-title">Today's edition isn't ready yet.</div>
+          <p style="color:var(--text-dim);font-size:0.9rem;text-align:center;max-width:80%;">Check back after 8am, or ask Bradley what's going on.</p>
+        </div>
+      </div>
 
   <script>
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -575,5 +578,5 @@
 
     load();
   </script>
-</body>
-</html>
+
+</body></html>

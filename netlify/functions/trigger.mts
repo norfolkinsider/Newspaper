@@ -119,9 +119,9 @@ export default async (req: Request, context: Context) => {
     const [weather, events, norfolkToday, cbcHamilton, brantfordExpositor, ctvKitchener, norfolkCounty] = await Promise.all([
       fetchWeather(), fetchEvents(),
       fetchRSS("https://www.norfolktoday.ca/feed/","Norfolk Today"),
-      fetchRSS("https://www.cbc.ca/cmlink/rss-canada-hamiltonnews","CBC Hamilton"),
+      fetchRSS("https://rss.cbc.ca/hamilton/news/","CBC Hamilton"),
+      fetchRSS("https://globalnews.ca/hamilton/feed/","Global News Hamilton"),
       fetchRSS("https://www.brantfordexpositor.ca/feed/","Brantford Expositor"),
-      fetchRSS("https://kitchener.ctvnews.ca/rss/ctv-news-kitchener-1.822545","CTV Kitchener"),
       fetchNorfolkCounty(),
     ]);
     const news = await summarizeNews([norfolkToday,cbcHamilton,brantfordExpositor,ctvKitchener,norfolkCounty]);

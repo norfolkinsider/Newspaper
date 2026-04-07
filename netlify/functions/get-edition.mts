@@ -1,7 +1,8 @@
 import type { Context } from "@netlify/functions";
 
 const AIRTABLE_BASE = "appAtE1hE5frgdQFo";
-const AIRTABLE_TABLE = "tblxnJEq6aeYI8BYM";
+const EVENTS_TABLE = "tblxnJEq6aeYI8BYM";
+const QUOTES_TABLE = "tblfEvFhW1XSWees2";
 const LAT = 42.84, LNG = -80.30;
 
 const WMO: Record<number, string> = {
@@ -31,7 +32,7 @@ async function fetchEvents() {
   const in30 = new Date(Date.now()+30*86400000).toISOString().split("T")[0];
   const formula = encodeURIComponent(`AND({Date}>="${today}",{Date}<="${in30}")`);
   const res = await fetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${AIRTABLE_TABLE}?filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=asc&maxRecords=100`,
+    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${EVENTS_TABLE}?filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=asc&maxRecords=100`,
     {headers:{Authorization:`Bearer ${process.env.AIRTABLE_TOKEN}`}}
   );
   const d = await res.json();
@@ -43,52 +44,22 @@ async function fetchEvents() {
   }));
 }
 
-function slugToTitle(slug: string): string {
-  return slug
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, l => l.toUpperCase())
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function fetchCountyUpdates() {
-  try {
-    const res = await fetch("https://www.norfolkcounty.ca/news-and-notices/", {
-      headers:{
-        "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language":"en-CA,en;q=0.9",
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!res.ok) return [];
-    const html = await res.text();
-
-    // Extract all unique post URLs
-    const seen = new Set<string>();
-    const updates: {title:string;url:string;description:string;source:string}[] = [];
-
-    for (const m of html.matchAll(/href="(https?:\/\/www\.norfolkcounty\.ca\/news-and-notices\/posts\/([^"?#\/]+)(?:\/)?)"[^>]*>/g)) {
-      const url = m[1].endsWith('/') ? m[1] : m[1] + '/';
-      const slug = m[2];
-      if (!seen.has(url) && slug && slug.length > 5) {
-        seen.add(url);
-        updates.push({
-          title: slugToTitle(slug),
-          url,
-          description: "",
-          source: "Norfolk County",
-        });
-      }
-      if (updates.length >= 4) break;
-    }
-
-    return updates;
-  } catch(e) {
-    console.error("County fetch error:", e);
-    return [];
-  }
+async function fetchDailyQuote() {
+  const res = await fetch(
+    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${QUOTES_TABLE}?maxRecords=100`,
+    {headers:{Authorization:`Bearer ${process.env.AIRTABLE_TOKEN}`}}
+  );
+  const d = await res.json();
+  const records = d.records || [];
+  if (records.length === 0) return null;
+  // Pick a quote based on day of year so it changes daily but is same all day
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  const record = records[dayOfYear % records.length];
+  return {
+    quote: record.fields.Quote || "",
+    author: record.fields.Author || "",
+    category: record.fields.Category || "",
+  };
 }
 
 export default async (req: Request, context: Context) => {
@@ -97,25 +68,17 @@ export default async (req: Request, context: Context) => {
       weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"America/Toronto"
     });
 
-    const [weather, events, countyUpdates] = await Promise.all([
+    const [weather, events, dailyQuote] = await Promise.all([
       fetchWeather(),
       fetchEvents(),
-      fetchCountyUpdates(),
+      fetchDailyQuote(),
     ]);
-
-    // If scraper fails, return a single link to the county news page
-    const news = countyUpdates.length > 0 ? countyUpdates : [{
-      title: "View Latest Norfolk County Updates",
-      url: "https://www.norfolkcounty.ca/news-and-notices/",
-      description: "Road closures, service disruptions, public notices and more.",
-      source: "Norfolk County",
-    }];
 
     return new Response(JSON.stringify({
       date: new Date().toISOString().split("T")[0],
       dateLabel,
       weather,
-      news,
+      dailyQuote,
       events,
     }), {
       headers:{

@@ -88,6 +88,21 @@
     .section-count { font-size: 0.65rem; color: var(--text-dim); }
     .divider { height: 1px; background: var(--border); margin: 0.25rem 1.25rem 1.25rem; }
 
+    /* Submit Event Link */
+    .submit-wrap { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+    .submit-link { 
+      font-size: 0.7rem; 
+      font-weight: 600; 
+      color: var(--green); 
+      text-decoration: none; 
+      background: var(--green-dim); 
+      padding: 0.4rem 0.8rem; 
+      border-radius: 10px; 
+      border: 1px solid rgba(37,153,91,0.2); 
+      transition: opacity 0.2s ease;
+    }
+    .submit-link:active { opacity: 0.7; }
+
     /* Town groups */
     .town-group { margin-bottom: 1.25rem; }
     .town-label { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); font-weight: 700; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
@@ -145,7 +160,7 @@
     function parseDatePill(dateStr) {
       if (!dateStr) return { day: '-', mon: '-' };
       var parts = dateStr.split('-');
-      if (parts.length === 3) return { day: parseInt(parts[2]), mon: MONTHS[parseInt(parts[1]) - 1] };
+      if (parts.length === 3) return { day: parseInt(parts), mon: MONTHS[parseInt(parts) - 1] };
       return { day: '-', mon: '-' };
     }
 
@@ -218,6 +233,9 @@
         renderQuote(ed.dailyQuote) +
         '<div class="divider"></div>' +
         '<div class="section">' +
+          '<div class="submit-wrap">' +
+            '<a href="https://norfolkinsider.ca/submit-event" target="_blank" class="submit-link">Submit an Event</a>' +
+          '</div>' +
           '<div class="section-header"><div class="section-label">Upcoming Events</div><div class="section-count">' + (ed.events || []).length + ' events</div></div>' +
           renderEvents(ed.events) +
         '</div>' +

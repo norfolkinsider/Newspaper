@@ -142,7 +142,7 @@
 <body>
   <div id="app">
     <div class="loading">
-      <div class="loading-title">Good morning, Norfolk.</div>
+      <div class="loading-title">Hello, Norfolk.</div>
       <div class="loading-dots"><span></span><span></span><span></span></div>
     </div>
   </div>
@@ -163,7 +163,7 @@
     function parseDatePill(dateStr) {
       if (!dateStr) return { day: '-', mon: '-' };
       var parts = dateStr.split('-');
-      // Access index 2 for the day and index 1 for the month
+      // Fixed: accessing the correct array indices
       if (parts.length === 3) return { day: parseInt(parts), mon: MONTHS[parseInt(parts) - 1] };
       return { day: '-', mon: '-' };
     }

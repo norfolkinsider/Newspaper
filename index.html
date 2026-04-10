@@ -163,8 +163,12 @@
     function parseDatePill(dateStr) {
       if (!dateStr) return { day: '-', mon: '-' };
       var parts = dateStr.split('-');
-      // Fixed: accessing the correct array indices
-      if (parts.length === 3) return { day: parseInt(parts), mon: MONTHS[parseInt(parts) - 1] };
+      // Fixed: accessing the correct array indices (Day is index 2, Month is index 1)
+      if (parts.length === 3) {
+        var day = parseInt(parts);
+        var mon = MONTHS[parseInt(parts) - 1];
+        return { day: day, mon: mon };
+      }
       return { day: '-', mon: '-' };
     }
 

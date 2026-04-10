@@ -9,3 +9,21 @@
   for = "/api/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
+    
+[[redirects]]
+  from = "/submit-event/*"
+  to = "https://rad-tanuki-6419ea.netlify.app/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/submit-event"
+  to = "https://rad-tanuki-6419ea.netlify.app"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/chat"
+  to = "https://rad-tanuki-6419ea.netlify.app/api/chat"
+  status = 200
+  force = true
